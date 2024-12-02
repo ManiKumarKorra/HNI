@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Operator Chat</title>
+    <style>
+        /* Minimal CSS styling */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f9f9f9;
+        }
+
+        #name1 {
+            font-size: 18px;
+            font-style: italic;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        form {
+            display: flex;
+            margin-top: 10px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        button {
+            padding: 8px 12px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        #messages {
+            list-style: none;
+            padding: 0;
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #fff;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        #messages li {
+            padding: 5px 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            background: #f1f1f1;
+        }
+
+        #messages li.self {
+            background: #d9edf7;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <p id="name1">Operator Chat</p>
+    <form onsubmit="sendMessage(event)">
+        <input type="text" id="messageText" autocomplete="off" />
+        <button type="submit">Send</button>
+    </form>
+    <ul id="messages"></ul>
+    <script>
+        function getRandomInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        const id = getRandomInt(1, 1000);
+        const role = "operator";
+        var ws = new WebSocket(`ws://localhost:8000/communicate/${id}/${role}`);
+
+        ws.onmessage = function (event) {
+            const messages = document.getElementById('messages');
+            const message = document.createElement('li');
+            message.textContent = event.data;
+            messages.appendChild(message);
+        };
+
+        function sendMessage(event) {
+            event.preventDefault();
+            const input = document.getElementById("messageText");
+            if (input.value.trim() !== "") {
+                ws.send(input.value);
+                displayOwnMessage(input.value);
+                input.value = "";
+            }
+        }
+
+        function displayOwnMessage(message) {
+            const messages = document.getElementById('messages');
+            const messageElement = document.createElement('li');
+            messageElement.textContent = message;
+            messageElement.classList.add('self');
+            messages.appendChild(messageElement);
+        }
+    </script>
+</body>
+</html>
