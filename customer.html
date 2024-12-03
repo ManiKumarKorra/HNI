@@ -129,7 +129,7 @@
 </head>
 <body>
     <p id="name1">Customer Chat</p>
-    <p style="text-align: center;">For operator interface, visit <a href="/operator">/operator</a></p>
+    <!-- <p style="text-align: center;">For operator interface, visit <a href="/operator">/operator</a></p> -->
   
     <ul id="messages"></ul>
     <form action="" onsubmit="sendMessage(event)">
@@ -160,7 +160,7 @@
             var message = document.createElement('li');
 
             // Handle specific message content for connecting to human
-            if (event.data === "You are now connected with a human operator" || event.data ==="we noticed that you are upset") {
+            if (event.data === "You are now chatting with a live representative.") {
                 connectedToOperator = true; // Switch to operator mode
                 message.textContent = event.data;
                 message.className = 'operator-message';

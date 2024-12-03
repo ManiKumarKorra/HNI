@@ -71,6 +71,8 @@ async def get_styles():
 
 check_connected_with_human = False
 
+whole_connversation = {}
+print(f"this is from outside {whole_connversation}")
 @app.websocket("/communicate/{client_id}/{role}")
 async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
     global check_connected_with_human  # Added this line to make `check_connected_with_human` global
@@ -80,7 +82,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
     try:
         if role == "customer":
             await manager.send_personal_message(
-                "Greetings! At HNI, we’re here to provide innovative solutions for your work and living spaces. How may we assist you?", websocket
+                "Hello! Welcome to HNI. We're here to offer creative solutions for your work and living spaces. How can I assist you today?", websocket
             )
         else:
             await manager.send_personal_message("Have a productive day!", websocket)
@@ -91,8 +93,9 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
                 intent = customer_intent.identify_intent(data)
                 sentiment  = analyze_sentiment(data)
                 if intent == "connect_with_human" or sentiment =='angry':
-                    if sentiment =='angry':
-                        await manager.send_personal_message("we noticed that you are upset", websocket)
+          
+                    # await manager.broadcast("summary",websocket)
+                    # await manager.broadcast(f"Operator {client_id}: {data}", websocket)
                         
                     print("calling connect with human")
                     check_connected_with_human = True  # Now modifying the global variable
@@ -109,15 +112,38 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
                     print("nope")
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
-        await manager.broadcast(f"{client_id} user has disconnected.", websocket)
+        await manager.broadcast(f"Operator {client_id} has disconnected.", websocket)
 
 
 async def connect_with_human(websocket: WebSocket, client_id: int, check_connected_with_human):
 
     """Handle transition to human operator."""
-    await manager.send_personal_message("You are now connected with a human operator", websocket)
-    await manager.broadcast(f"Customer {client_id} requested for a connect with an operator.", websocket)
-    await manager.broadcast("customer is connected",websocket)
+    await manager.send_personal_message("You are now chatting with a live representative.", websocket)
+    await manager.broadcast(f"Customer {client_id} has requested to speak with an operator.", websocket)
+    await manager.broadcast("Connection successful with the customer chat. Please proceed.",websocket)
+    print(f"this message is from connect with humn function {whole_connversation}")
+    await manager.broadcast(f"previous coversation between bot and customer",websocket)
+    index = 0
+
+
+    for message in reversed(whole_connversation['whole_data'].data):  
+        print(f"Message ID: {message.id}")
+        
+        for content_block in reversed(message.content):  # Loop through the content list in reverse
+            if hasattr(content_block, 'text'):  # Check if 'text' attribute exists
+                print(f"Content Value: {content_block.text.value}")
+                
+                
+                if index % 2 == 0:
+                    await manager.broadcast(f"user : {content_block.text.value}", websocket)
+                else:
+                    await manager.broadcast(f"Bot : {content_block.text.value}", websocket)
+                    
+                index += 1
+
+    
+            
+    # await manager.broadcast(f"coversation {whole_connversation}",websocket)
     print(f"this is client_id{client_id}")
 
     try:
@@ -163,7 +189,12 @@ def chat_with_bot_sync(data: str) -> str:
         )
         if run.status == 'completed':
             messages = client.beta.threads.messages.list(thread_id=thread.id)
-            print(f"this is a tread messae{messages}")
+            print("this is messages", messages)
+           
+            global whole_connversation
+            whole_connversation['whole_data'] = messages
+            print(whole_connversation)
+            print("inside function",whole_connversation)
             response = messages.data[0].content[0].text.value
             return response
         else:
@@ -172,6 +203,8 @@ def chat_with_bot_sync(data: str) -> str:
         logging.error(f"Bot Error: {str(e)}")
         return "An error occurred. Please try again."
     
+print(whole_connversation)
+    
 
 
 def analyze_sentiment(text: str) -> str:
@@ -179,6 +212,6 @@ def analyze_sentiment(text: str) -> str:
     blob = TextBlob(text)
     polarity = blob.sentiment.polarity
 
-    if polarity < 1:  # Adjust threshold as needed
+    if polarity < -0.3:  # Adjust threshold as needed
         return "angry"
     return "normal"
