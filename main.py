@@ -7,7 +7,13 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 import logging
 import customer_intent
-from textblob import TextBlob
+
+from transformers import pipeline
+
+import warnings
+ 
+# Ignore all warnings
+warnings.filterwarnings("ignore")
 # Load the .env file
 load_dotenv()
 
@@ -20,6 +26,7 @@ ASSISTANT_ID = os.getenv("ASSISTANT_ID")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("transformers").setLevel(logging.ERROR)
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -72,6 +79,8 @@ async def get_styles():
 check_connected_with_human = False
 
 whole_connversation = {}
+whole_connversation["isthereconvo"]= False
+print("whole conversation outside", whole_connversation['isthereconvo'] )
 print(f"this is from outside {whole_connversation}")
 @app.websocket("/communicate/{client_id}/{role}")
 async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
@@ -91,8 +100,10 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
             data = await websocket.receive_text()
             if role == "customer":
                 intent = customer_intent.identify_intent(data)
+                print("intent from websocket", intent)
                 sentiment  = analyze_sentiment(data)
-                if intent == "connect_with_human" or sentiment =='angry':
+                print("sentiment in websocket", sentiment)
+                if intent == "connect_with_human" or sentiment =='NEGATIVE':
           
                     # await manager.broadcast("summary",websocket)
                     # await manager.broadcast(f"Operator {client_id}: {data}", websocket)
@@ -107,7 +118,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
                     await manager.send_personal_message(bot_response, websocket)
             elif role == "operator":
                 if check_connected_with_human:
-                    await manager.broadcast(f"Operator {client_id}: {data}", websocket)
+                    await manager.broadcast(f"Operator {data}", websocket)
                 else:
                     print("nope")
     except WebSocketDisconnect:
@@ -122,26 +133,29 @@ async def connect_with_human(websocket: WebSocket, client_id: int, check_connect
     await manager.broadcast(f"Customer {client_id} has requested to speak with an operator.", websocket)
     await manager.broadcast("Connection successful with the customer chat. Please proceed.",websocket)
     print(f"this message is from connect with humn function {whole_connversation}")
-    await manager.broadcast(f"previous coversation between bot and customer",websocket)
-    index = 0
-
-
-    for message in reversed(whole_connversation['whole_data'].data):  
-        print(f"Message ID: {message.id}")
-        
-        for content_block in reversed(message.content):  # Loop through the content list in reverse
-            if hasattr(content_block, 'text'):  # Check if 'text' attribute exists
-                print(f"Content Value: {content_block.text.value}")
-                
-                
-                if index % 2 == 0:
-                    await manager.broadcast(f"user : {content_block.text.value}", websocket)
-                else:
-                    await manager.broadcast(f"Bot : {content_block.text.value}", websocket)
-                    
-                index += 1
-
+    await manager.broadcast(f"summary :",websocket)
     
+
+    if whole_connversation["isthereconvo"]:
+            index = 0       
+            for message in reversed(whole_connversation['whole_data'].data):  
+                print(f"Message ID: {message.id}")
+                
+                for content_block in reversed(message.content):  # Loop through the content list in reverse
+                    if hasattr(content_block, 'text'):  # Check if 'text' attribute exists
+                        print(f"Content Value: {content_block.text.value}")
+                        
+                        
+                        if index % 2 == 0:
+                            await manager.broadcast(f"user : {content_block.text.value}", websocket)
+                        else:
+                            await manager.broadcast(f"Bot : {content_block.text.value}", websocket)
+                            
+                        index += 1
+    else:
+        await manager.broadcast("no previous conversation", websocket)
+
+
             
     # await manager.broadcast(f"coversation {whole_connversation}",websocket)
     print(f"this is client_id{client_id}")
@@ -183,8 +197,7 @@ def chat_with_bot_sync(data: str) -> str:
             thread_id=thread.id,
             assistant_id=ASSISTANT_ID,
             instructions=(
-                "Please respond to the user. Address them as a valuable HNI customer. do not disclose the data where  you are getting from like which data source .txt   and text should be neat and clean readable"
-                
+                "Please respond to the user. Address them as a  HNI customer.Respond to the user in a professional and customer-focused manner. Avoid referencing data sources or providing source details. Write a clear, well-formatted, and readable response."
             )
         )
         if run.status == 'completed':
@@ -192,6 +205,9 @@ def chat_with_bot_sync(data: str) -> str:
             print("this is messages", messages)
            
             global whole_connversation
+            
+            whole_connversation['isthereconvo'] = True
+            print("whole conversation", whole_connversation['isthereconvo'] )
             whole_connversation['whole_data'] = messages
             print(whole_connversation)
             print("inside function",whole_connversation)
@@ -208,10 +224,15 @@ print(whole_connversation)
 
 
 def analyze_sentiment(text: str) -> str:
-   
-    blob = TextBlob(text)
-    polarity = blob.sentiment.polarity
+ 
+    classifier = pipeline('sentiment-analysis')
+ 
+    sentiment = classifier(text)
+    print(f"result{sentiment}")
+    # print(f"result{result}")
+ 
+    return sentiment[0]['label']
+ 
 
-    if polarity < -0.3:  # Adjust threshold as needed
-        return "angry"
-    return "normal"
+ 
+ 

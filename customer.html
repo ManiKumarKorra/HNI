@@ -75,7 +75,7 @@
             list-style: none;
             margin: 20px auto;
             max-width: 600px;
-            height: 700px; /* Increased height for more messages */
+            height: 600px; /* Increased height for more messages */
             padding: 15px;
             background-color: #fff; /* White background for message area */
             border: 1px solid #ddd; /* Light gray border */
@@ -129,21 +129,17 @@
 </head>
 <body>
     <p id="name1">Customer Chat</p>
-    <!-- <p style="text-align: center;">For operator interface, visit <a href="/operator">/operator</a></p> -->
-  
     <ul id="messages"></ul>
     <form action="" onsubmit="sendMessage(event)">
         <input type="text" id="messageText" autocomplete="off" placeholder="Type your message here..." />
         <button>Send</button>
     </form>
     <script>
-     
-       function getRandomInt(min, max) {
+        function getRandomInt(min, max) {
             return Math.floor(Math.random() * (max - min + 1)) + min;
         }
 
         const id = getRandomInt(1, 1000);
-
         const role = "customer";
         let connectedToOperator = false;
 
@@ -151,10 +147,11 @@
 
         ws.onmessage = function (event) {
             var messages = document.getElementById('messages');
-            var loadingIndicator = document.getElementById('loadingIndicator');
 
+            // Remove the loading indicator
+            var loadingIndicator = document.getElementById('loadingIndicator');
             if (loadingIndicator) {
-                messages.removeChild(loadingIndicator); // Remove the loading indicator
+                messages.removeChild(loadingIndicator);
             }
 
             var message = document.createElement('li');
@@ -164,18 +161,15 @@
                 connectedToOperator = true; // Switch to operator mode
                 message.textContent = event.data;
                 message.className = 'operator-message';
-                messages.appendChild(message);
-                messages.scrollTop = messages.scrollHeight; // Auto-scroll to the latest message
-                return; // Stop further processing for this message
-            }
-
-            // Handle regular messages
-            message.textContent = event.data;
-
-            if (connectedToOperator) {
-                message.className = 'operator-message'; // Style for operator messages
             } else {
-                message.className = 'bot-message'; // Style for bot messages
+                // Handle regular messages
+                message.textContent = event.data;
+
+                if (connectedToOperator) {
+                    message.className = 'operator-message'; // Style for operator messages
+                } else {
+                    message.className = 'bot-message'; // Style for bot messages
+                }
             }
 
             messages.appendChild(message);
@@ -192,6 +186,12 @@
             userMessage.className = 'user-message';
             messages.appendChild(userMessage);
 
+            // Remove any existing loading indicator
+            var existingLoadingIndicator = document.getElementById('loadingIndicator');
+            if (existingLoadingIndicator) {
+                messages.removeChild(existingLoadingIndicator);
+            }
+
             // Append a loading indicator if not connected to operator
             if (!connectedToOperator) {
                 var loadingIndicator = document.createElement('div');
@@ -207,8 +207,10 @@
             // Clear the input field
             input.value = '';
             event.preventDefault();
+
+            // Ensure the chat scrolls to the bottom
+            messages.scrollTop = messages.scrollHeight;
         }
     </script>
 </body>
 </html>
-<!-- //this is customer.html  // first display those two opations here whe one aboutus with value about as and another carrer and value carrer if clcik sent that -->
