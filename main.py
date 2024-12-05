@@ -6,14 +6,15 @@ import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 import logging
-import customer_intent
+# import customer_intent
+import json
+import check_intent
+from textblob import TextBlob 
+import re
 
-from transformers import pipeline
-
-import warnings
  
 # Ignore all warnings
-warnings.filterwarnings("ignore")
+
 # Load the .env file
 load_dotenv()
 
@@ -21,7 +22,9 @@ load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Assistant ID
+
 ASSISTANT_ID = os.getenv("ASSISTANT_ID")
+print("ass", ASSISTANT_ID)
 
 
 # Configure logging
@@ -99,34 +102,58 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
         while session_active:
             data = await websocket.receive_text()
             if role == "customer":
-                intent = customer_intent.identify_intent(data)
+                intent = check_intent.load_model_and_predict(data)
                 print("intent from websocket", intent)
                 sentiment  = analyze_sentiment(data)
                 print("sentiment in websocket", sentiment)
-                if intent == "connect_with_human" or sentiment =='NEGATIVE':
-          
-                    # await manager.broadcast("summary",websocket)
-                    # await manager.broadcast(f"Operator {client_id}: {data}", websocket)
-                        
-                    print("calling connect with human")
-                    check_connected_with_human = True  # Now modifying the global variable
-                    await connect_with_human(websocket, client_id, check_connected_with_human)
-                    session_active = False
+                if intent == "connect_with_human" or sentiment == 'NEGATIVE':
+                    await manager.send_personal_message(
+                        json.dumps({
+                            "type": "options",
+                            "message": "Do you want to speak with our executive now?",
+                            "options": ["Yes", "No"],
+                            "previous_message" :data
+
+                        }),
+                        websocket
+                    )
+                    # Wait for the user's choice from the frontend
+                    data = await websocket.receive_text()
+                    parsed_data = json.loads(data)
+                    print(f"parsed data {parsed_data}")
+                    choice = parsed_data.get("choice", "").lower()
+                    previous_message = parsed_data.get("previous_message", "")
+                    data = f"The previous message was: '{previous_message}'. We offered the user an option to connect with an executive, and their choice was: '{choice}'."
+
+
+                    data = f"The previous message was: '{previous_message}'. We offered the user an option to connect with an executive, and their choice was: '{choice}'."
+
+
+                    if choice == "yes":
+                        print("Calling connect with human")
+                        check_connected_with_human = True  # Now modifying the global variable
+                        await connect_with_human(websocket, client_id, check_connected_with_human, data)
+                        session_active = False
+                    else:
+                        bot_response = await chat_with_bot(data)
+                        bot_response= re.sub(r"【.*?】|[#*&^]", "",bot_response)
+                        await manager.send_personal_message(bot_response, websocket)
 
                 else:
                     bot_response = await chat_with_bot(data)
+                    bot_response= re.sub(r"【.*?】|[#*&^]", "",bot_response)
                     await manager.send_personal_message(bot_response, websocket)
             elif role == "operator":
                 if check_connected_with_human:
-                    await manager.broadcast(f"Operator {data}", websocket)
+                    await manager.broadcast(f"Operator  {data}", websocket)
                 else:
                     print("nope")
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
-        await manager.broadcast(f"Operator {client_id} has disconnected.", websocket)
+        # await manager.broadcast(f"Operator {client_id} has disconnected.", websocket)
 
 
-async def connect_with_human(websocket: WebSocket, client_id: int, check_connected_with_human):
+async def connect_with_human(websocket: WebSocket, client_id: int, check_connected_with_human,data):
 
     """Handle transition to human operator."""
     await manager.send_personal_message("You are now chatting with a live representative.", websocket)
@@ -147,11 +174,15 @@ async def connect_with_human(websocket: WebSocket, client_id: int, check_connect
                         
                         
                         if index % 2 == 0:
-                            await manager.broadcast(f"user : {content_block.text.value}", websocket)
+                            if content_block.text.value == "The customer was asked if they would like to connect with a human executive but declined the offer":
+                                await manager.broadcast(f"Noted : {content_block.text.value}", websocket)
+                            else:
+                                await manager.broadcast(f"user : {content_block.text.value}", websocket)
                         else:
                             await manager.broadcast(f"Bot : {content_block.text.value}", websocket)
                             
                         index += 1
+            await manager.broadcast(f"user : {data}", websocket)
     else:
         await manager.broadcast("no previous conversation", websocket)
 
@@ -180,6 +211,7 @@ async def chat_with_bot(data: str) -> str:
     return await asyncio.to_thread(chat_with_bot_sync, data)
 
 
+
 client = openai.OpenAI()
 thread = client.beta.threads.create()
 print("Initializing chat thread...")
@@ -197,7 +229,7 @@ def chat_with_bot_sync(data: str) -> str:
             thread_id=thread.id,
             assistant_id=ASSISTANT_ID,
             instructions=(
-                "Please respond to the user. Address them as a  HNI customer.Respond to the user in a professional and customer-focused manner. Avoid referencing data sources or providing source details. Write a clear, well-formatted, and readable response."
+                "Please respond to the user. Address them as a  HNI customer.Respond to the user in a professional and customer-focused manner. Write a clear, well-formatted, and readable response.Additionally,try to provide links from the documents and links must be clickable example <a href='https://www.gunlocke.com'>gunlocke</a>."
             )
         )
         if run.status == 'completed':
@@ -205,6 +237,7 @@ def chat_with_bot_sync(data: str) -> str:
             print("this is messages", messages)
            
             global whole_connversation
+            
             
             whole_connversation['isthereconvo'] = True
             print("whole conversation", whole_connversation['isthereconvo'] )
@@ -221,18 +254,13 @@ def chat_with_bot_sync(data: str) -> str:
     
 print(whole_connversation)
     
-
-
 def analyze_sentiment(text: str) -> str:
+    blob = TextBlob(text)
+    polarity = blob.sentiment.polarity
  
-    classifier = pipeline('sentiment-analysis')
- 
-    sentiment = classifier(text)
-    print(f"result{sentiment}")
-    # print(f"result{result}")
- 
-    return sentiment[0]['label']
- 
+    if polarity < -0.3:  # Adjust threshold as needed
+        return "NEGATIVE"
+    return "POSITIVE"
 
  
  

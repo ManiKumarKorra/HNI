@@ -75,7 +75,7 @@
             list-style: none;
             margin: 20px auto;
             max-width: 600px;
-            height: 600px; /* Increased height for more messages */
+            height: 750px; /* Increased height for more messages */
             padding: 15px;
             background-color: #fff; /* White background for message area */
             border: 1px solid #ddd; /* Light gray border */
@@ -106,6 +106,8 @@
         .bot-message {
             text-align: left;
             margin-right: auto; /* Align to the left */
+            white-space: pre-wrap; /* Preserve formatting but allow wrapping */
+            word-wrap: break-word;
         }
 
         /* Operator Message Styling */
@@ -138,60 +140,112 @@
         function getRandomInt(min, max) {
             return Math.floor(Math.random() * (max - min + 1)) + min;
         }
-
+    
         const id = getRandomInt(1, 1000);
         const role = "customer";
         let connectedToOperator = false;
-
-        var ws = new WebSocket(`ws://localhost:8000/communicate/${id}/${role}`);
-
+    
+        // var ws = new WebSocket(`ws://localhost:8000/communicate/${id}/${role}`);
+        const ws = new WebSocket(`/communicate/${id}/${role}`);
+    
         ws.onmessage = function (event) {
             var messages = document.getElementById('messages');
-
+    
             // Remove the loading indicator
             var loadingIndicator = document.getElementById('loadingIndicator');
             if (loadingIndicator) {
                 messages.removeChild(loadingIndicator);
             }
+    
+            try {
+                var data = JSON.parse(event.data);
+                if (data.type === "options") {
+                    // Display the prompt message
+                    var message = document.createElement('li');
+                    message.textContent = data.message;
+                    message.className = 'bot-message';
+                    messages.appendChild(message);
+    
+                    // Create buttons for each option
+                    var buttonContainer = document.createElement('div');
+                    buttonContainer.style.margin = "10px 0";
+    
+                    data.options.forEach(option => {
+                        var button = document.createElement('button');
+                        button.textContent = option;
+                        button.style.marginRight = "5px";
+                        button.style.padding = "8px 12px";
+                        button.style.border = "1px solid #ddd";
+                        button.style.borderRadius = "4px";
+                        button.style.backgroundColor = "#C71C15";
+                        button.style.color = "white";
+                        button.style.cursor = "pointer";
+    
+                        button.onclick = function () {
+                            const response = {
+                            choice: option.toLowerCase(), 
+                             previous_message: data.previous_message 
+                                 };
 
-            var message = document.createElement('li');
-
-            // Handle specific message content for connecting to human
-            if (event.data === "You are now chatting with a live representative.") {
-                connectedToOperator = true; // Switch to operator mode
+                                 var loadingIndicator = document.createElement('div');
+                                loadingIndicator.textContent = "Loading...";
+                                loadingIndicator.id = 'loadingIndicator';
+                                loadingIndicator.className = 'loading';
+                                messages.appendChild(loadingIndicator);
+                            ws.send(JSON.stringify(response)); 
+                            messages.removeChild(buttonContainer); // Remove buttons after selection
+                        };
+    
+                        buttonContainer.appendChild(button);
+                    });
+    
+                    messages.appendChild(buttonContainer);
+                } else {
+                    // Handle regular messages
+                    var message = document.createElement('li');
+                    message.textContent = data.message || event.data;
+    
+                    if (connectedToOperator) {
+                        message.className = 'operator-message'; // Style for operator messages
+                    } else {
+                        message.className = 'bot-message'; // Style for bot messages
+                    }
+    
+                    messages.appendChild(message);
+                }
+            } catch (e) {
+                // If event data is not JSON, treat as a regular message
+                var message = document.createElement('li');
                 message.textContent = event.data;
-                message.className = 'operator-message';
-            } else {
-                // Handle regular messages
-                message.textContent = event.data;
-
+    
                 if (connectedToOperator) {
                     message.className = 'operator-message'; // Style for operator messages
                 } else {
                     message.className = 'bot-message'; // Style for bot messages
                 }
+    
+                messages.appendChild(message);
             }
-
-            messages.appendChild(message);
+    
             messages.scrollTop = messages.scrollHeight; // Auto-scroll to the latest message
         };
-
+    
         function sendMessage(event) {
             var input = document.getElementById("messageText");
             var messages = document.getElementById("messages");
-
+    
             // Append the user's message
             var userMessage = document.createElement('li');
             userMessage.textContent = input.value;
             userMessage.className = 'user-message';
             messages.appendChild(userMessage);
-
+    
             // Remove any existing loading indicator
             var existingLoadingIndicator = document.getElementById('loadingIndicator');
             if (existingLoadingIndicator) {
                 messages.removeChild(existingLoadingIndicator);
             }
-
+    
             // Append a loading indicator if not connected to operator
             if (!connectedToOperator) {
                 var loadingIndicator = document.createElement('div');
@@ -200,17 +254,18 @@
                 loadingIndicator.className = 'loading';
                 messages.appendChild(loadingIndicator);
             }
-
+    
             // Send the message to the WebSocket server
             ws.send(input.value);
-
+    
             // Clear the input field
             input.value = '';
             event.preventDefault();
-
+    
             // Ensure the chat scrolls to the bottom
             messages.scrollTop = messages.scrollHeight;
         }
     </script>
+    
 </body>
 </html>
