@@ -162,7 +162,8 @@
                 if (data.type === "options") {
                     // Display the prompt message
                     var message = document.createElement('li');
-                    message.textContent = data.message;
+                    message.innerHTML  = data.message;
+                    console.log("fsdf", message.data)
                     message.className = 'bot-message';
                     messages.appendChild(message);
     
@@ -203,7 +204,12 @@
                 } else {
                     // Handle regular messages
                     var message = document.createElement('li');
-                    message.textContent = data.message || event.data;
+                   
+                    message.innerHTML  = data.message || event.data;
+                    
+
+                    console.log("sadasd",data.message)
+                    console.log("asafa",event.data)
     
                     if (connectedToOperator) {
                         message.className = 'operator-message'; // Style for operator messages
@@ -216,7 +222,9 @@
             } catch (e) {
                 // If event data is not JSON, treat as a regular message
                 var message = document.createElement('li');
-                message.textContent = event.data;
+                new_data =`<p>${event.data}</p>`
+                message.innerHTML = event.data;
+                console.log("dada",event.data)
     
                 if (connectedToOperator) {
                     message.className = 'operator-message'; // Style for operator messages

@@ -11,6 +11,7 @@ import json
 import check_intent
 from textblob import TextBlob 
 import re
+from markdown import markdown
 
  
 # Ignore all warnings
@@ -217,6 +218,7 @@ thread = client.beta.threads.create()
 print("Initializing chat thread...")
 print(f"Thread initialized: {thread.id}")
 
+
 def chat_with_bot_sync(data: str) -> str:
     """Synchronous bot logic."""
     try:
@@ -229,7 +231,7 @@ def chat_with_bot_sync(data: str) -> str:
             thread_id=thread.id,
             assistant_id=ASSISTANT_ID,
             instructions=(
-                "Please respond to the user. Address them as a  HNI customer.Respond to the user in a professional and customer-focused manner. Write a clear, well-formatted, and readable response.Additionally,try to provide links from the documents and links must be clickable example <a href='https://www.gunlocke.com'>gunlocke</a>."
+                """Please respond to the user. Address them as a  HNI customer.Respond to the user in a professional and customer-focused manner. Write a clear, well-formatted, and readable response.Additionally,try to provide links from the dcoument if only available dont give empty links"""
             )
         )
         if run.status == 'completed':
@@ -245,7 +247,10 @@ def chat_with_bot_sync(data: str) -> str:
             print(whole_connversation)
             print("inside function",whole_connversation)
             response = messages.data[0].content[0].text.value
-            return response
+            def convert_markdown_to_html(markdown_text):
+                return markdown(markdown_text)
+            new_resposne =convert_markdown_to_html(response)
+            return new_resposne
         else:
             return "Bot is still processing..."
     except Exception as e:
