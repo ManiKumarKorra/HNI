@@ -80,7 +80,7 @@ async def get_operator():
 async def get_styles():
     return FileResponse('styles.css')
 
-check_connected_with_human = False
+
 
 whole_connversation = {}
 whole_connversation["isthereconvo"]= False
@@ -88,11 +88,16 @@ print("whole conversation outside", whole_connversation['isthereconvo'] )
 print(f"this is from outside {whole_connversation}")
 @app.websocket("/communicate/{client_id}/{role}")
 async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
-    global check_connected_with_human  # Added this line to make `check_connected_with_human` global
+    global check_connected_with_human
+    check_connected_with_human = False
+      # Added this line to make `check_connected_with_human` global
     await manager.connect(websocket, role)
     session_active = True
     print(f"client id is {client_id}")
     try:
+        client = openai.OpenAI()
+        thread = client.beta.threads.create()
+        print(f"New thread initialized for client {client_id}: {thread.id}")
         if role == "customer":
             await manager.send_personal_message(
                 "Hello! Welcome to HNI. We're here to offer creative solutions for your work and living spaces. How can I assist you today?", websocket
@@ -133,19 +138,21 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
                     if choice == "yes":
                         print("Calling connect with human")
                         check_connected_with_human = True  # Now modifying the global variable
+                        print(f" changing connection", check_connected_with_human)
                         await connect_with_human(websocket, client_id, check_connected_with_human, data)
                         session_active = False
                     else:
-                        bot_response = await chat_with_bot(data)
+                        bot_response = await chat_with_bot(data,client,thread)
                         bot_response= re.sub(r"【.*?】|[#*&^]", "",bot_response)
                         await manager.send_personal_message(bot_response, websocket)
 
                 else:
-                    bot_response = await chat_with_bot(data)
+                    bot_response = await chat_with_bot(data,client,thread)
                     bot_response= re.sub(r"【.*?】|[#*&^]", "",bot_response)
                     await manager.send_personal_message(bot_response, websocket)
             elif role == "operator":
                 if check_connected_with_human:
+                    print("is user requested", check_connected_with_human)
                     await manager.broadcast(f"Operator  {data}", websocket)
                 else:
                     print("nope")
@@ -207,19 +214,19 @@ async def connect_with_human(websocket: WebSocket, client_id: int, check_connect
         await manager.disconnect(websocket)
         await manager.broadcast(f"{client_id} has disconnected.", websocket)
 
-async def chat_with_bot(data: str) -> str:
+async def chat_with_bot(data: str,client,thread) -> str:
     """Run the bot logic asynchronously."""
-    return await asyncio.to_thread(chat_with_bot_sync, data)
+    return await asyncio.to_thread(chat_with_bot_sync, data,client,thread)
 
 
 
-client = openai.OpenAI()
-thread = client.beta.threads.create()
-print("Initializing chat thread...")
-print(f"Thread initialized: {thread.id}")
+# client = openai.OpenAI()
+# thread = client.beta.threads.create()
+# print("Initializing chat thread...")
+# print(f"Thread initialized: {thread.id}")
 
 
-def chat_with_bot_sync(data: str) -> str:
+def chat_with_bot_sync(data: str, client,thread) -> str:
     """Synchronous bot logic."""
     try:
         client.beta.threads.messages.create(
