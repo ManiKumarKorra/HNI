@@ -22,9 +22,9 @@
 #     "Please transfer me to a human being", "I need real-time help from a person",
     
 #     # other examples (270+ examples)
-#     "What is your pricing?", "Can you help me reset my password?",
-#     "How do I change my email address?", "What are your operating hours?",
-#     "Tell me more about your services", "What is the return policy?",
+#     "who is the person",
+#     "who is the sales person of hni",
+#     "who is the chair person of hni",
 #     "How do I place an order?", "Where is my package?",
 #     "Can I get a refund?", "How long does shipping take?",
 #     "What is the warranty on this product?", "I need help troubleshooting my issue",
