@@ -12,7 +12,8 @@ import check_intent
 from textblob import TextBlob 
 import re
 from markdown import markdown
-
+import mistune
+import check_answer
  
 # Ignore all warnings
 
@@ -25,7 +26,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 # Assistant ID
 
 ASSISTANT_ID = os.getenv("ASSISTANT_ID")
-print("ass", ASSISTANT_ID)
+print("assisnatn", ASSISTANT_ID)
 
 
 # Configure logging
@@ -91,6 +92,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
     global check_connected_with_human
     global check_operator_available
     check_operator_available = False
+  
+    count_tracker = {"total_count": 0}
 
     check_connected_with_human = False
       # Added this line to make `check_connected_with_human` global
@@ -112,12 +115,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
 
         while session_active:
             data = await websocket.receive_text()
+            print(f"data is {data}")
             if role == "customer":
                 intent = check_intent.load_model_and_predict(data)
                 print("intent from websocket", intent)
                 sentiment  = analyze_sentiment(data)
                 print("sentiment in websocket", sentiment)
-                if intent == "connect_with_human" or sentiment == 'NEGATIVE':
+                if intent == "connect_with_human" or sentiment == 'NEGATIVE' or count_tracker["total_count"] == 2 :
                     await manager.send_personal_message(
                         json.dumps({
                             "type": "options",
@@ -128,6 +132,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
                         }),
                         websocket
                     )
+                    count_tracker["total_count"] = 0
                     # Wait for the user's choice from the frontend
                     data = await websocket.receive_text()
                     parsed_data = json.loads(data)
@@ -144,17 +149,34 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
                         print("Calling connect with human")
                         check_connected_with_human = True  # Now modifying the global variable
                         print(f" changing connection", check_connected_with_human)
-                        await connect_with_human(websocket, client_id, data, check_operator_available)
-                        session_active = False
+                        
+                        await connect_with_human(websocket, client_id, data, check_operator_available, check_connected_with_human, session_active)
+                        
                     else:
-                        bot_response = await chat_with_bot(data,client,thread)
+                        bot_response = await chat_with_bot(data,client,thread, count_tracker)
                         bot_response= re.sub(r"【.*?】|[#*&^]", "",bot_response)
+                        count_tracker["total_count"] = 0
                         await manager.send_personal_message(bot_response, websocket)
 
                 else:
-                    bot_response = await chat_with_bot(data,client,thread)
+                    bot_response = await chat_with_bot(data,client,thread,count_tracker)
                     bot_response= re.sub(r"【.*?】|[#*&^]", "",bot_response)
                     await manager.send_personal_message(bot_response, websocket)
+                
+
+
+                # if count_tracker["total_count"] == 2:
+                #     print("Count threshold met, offering escalation...")
+                #     await manager.send_personal_message(
+                #         json.dumps({
+                #             "type": "options",
+                #             "message": "Do you want to speak with our executive now?",
+                #             "options": ["Yes", "No"],
+                #             "previous_message": data
+                #         }),
+                #         websocket
+                #     )
+                #     count_tracker["total_count"] = 0
             elif role == "operator":
                 
                 if check_connected_with_human:
@@ -168,7 +190,12 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
         # await manager.broadcast(f"Operator {client_id} has disconnected.", websocket)
 
 
-async def connect_with_human(websocket: WebSocket, client_id: int,data, check_operator_available):
+async def connect_with_human(websocket: WebSocket, client_id: int,data, check_operator_available,check_connected_with_human,session_active):
+        
+
+    if check_operator_available:
+            session_active = False
+    
     
             """Handle transition to human operator."""
             await manager.send_personal_message("You are now chatting with a live representative.", websocket)
@@ -221,12 +248,20 @@ async def connect_with_human(websocket: WebSocket, client_id: int,data, check_op
                 await manager.disconnect(websocket)
                 await manager.broadcast(f"{client_id} has disconnected.", websocket)
 
+    else :
+        await manager.send_personal_message("Currently, our executive is unavailable.", websocket)
+        check_connected_with_human = False
+        session_active = True
+        return
+         
 
 
 
-async def chat_with_bot(data: str,client,thread) -> str:
+
+
+async def chat_with_bot(data: str,client,thread,count_tracker) -> str:
     """Run the bot logic asynchronously."""
-    return await asyncio.to_thread(chat_with_bot_sync, data,client,thread)
+    return await asyncio.to_thread(chat_with_bot_sync, data,client,thread,count_tracker)
 
 
 
@@ -236,7 +271,7 @@ async def chat_with_bot(data: str,client,thread) -> str:
 # print(f"Thread initialized: {thread.id}")
 
 
-def chat_with_bot_sync(data: str, client,thread) -> str:
+def chat_with_bot_sync(data: str, client,thread,count_tracker) -> str:
     """Synchronous bot logic."""
     try:
         client.beta.threads.messages.create(
@@ -248,7 +283,7 @@ def chat_with_bot_sync(data: str, client,thread) -> str:
             thread_id=thread.id,
             assistant_id=ASSISTANT_ID,
             instructions=(
-                """Please respond to the user. Address them as a  HNI customer.Respond to the user in a professional and customer-focused manner. Write a clear, well-formatted, and readable response.Additionally,try to provide links from the dcoument if only available dont give empty links"""
+                """Please respond to the user. Address them as a  HNI customer.Respond to the user in a professional and customer-focused manner and answer mostly within the context of HNI coporation and dont hullicinate anything with is not in knowledge base. Write a clear, well-formatted, and readable response.Additionally,try to provide links from the dcoument if only available dont give empty links and make sure neat and clean no unesscary space and make sure to strictly only from the given documents do not anwer any thing which is not in the documents"""
             )
         )
         if run.status == 'completed':
@@ -264,9 +299,25 @@ def chat_with_bot_sync(data: str, client,thread) -> str:
             print(whole_connversation)
             print("inside function",whole_connversation)
             response = messages.data[0].content[0].text.value
+            print(f"resposne, {response}")
+
+            increase_count=check_answer.check_answer_type(response)
+            print(f"check answer type {increase_count}")
+            if increase_count =="donotanswer":
+                count_tracker["total_count"] += 1
+            else:
+                count_tracker["total_count"] = 0
+            
+            print(f"current count value is {count_tracker}")
+            
+
+
             def convert_markdown_to_html(markdown_text):
-                return markdown(markdown_text)
-            new_resposne =convert_markdown_to_html(response)
+                markdown_renderer = mistune.create_markdown()
+                return markdown_renderer(markdown_text)
+
+        
+            new_resposne = convert_markdown_to_html(response)
             return new_resposne
         else:
             return "Bot is still processing..."
@@ -275,6 +326,9 @@ def chat_with_bot_sync(data: str, client,thread) -> str:
         return "An error occurred. Please try again."
     
 print(whole_connversation)
+
+
+
     
 def analyze_sentiment(text: str) -> str:
     blob = TextBlob(text)
