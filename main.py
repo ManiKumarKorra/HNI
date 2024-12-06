@@ -89,6 +89,9 @@ print(f"this is from outside {whole_connversation}")
 @app.websocket("/communicate/{client_id}/{role}")
 async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
     global check_connected_with_human
+    global check_operator_available
+    check_operator_available = False
+
     check_connected_with_human = False
       # Added this line to make `check_connected_with_human` global
     await manager.connect(websocket, role)
@@ -103,7 +106,9 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
                 "Hello! Welcome to HNI. We're here to offer creative solutions for your work and living spaces. How can I assist you today?", websocket
             )
         else:
+            check_operator_available = True
             await manager.send_personal_message("Have a productive day!", websocket)
+            
 
         while session_active:
             data = await websocket.receive_text()
@@ -139,7 +144,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
                         print("Calling connect with human")
                         check_connected_with_human = True  # Now modifying the global variable
                         print(f" changing connection", check_connected_with_human)
-                        await connect_with_human(websocket, client_id, check_connected_with_human, data)
+                        await connect_with_human(websocket, client_id, data, check_operator_available)
                         session_active = False
                     else:
                         bot_response = await chat_with_bot(data,client,thread)
@@ -151,68 +156,73 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
                     bot_response= re.sub(r"【.*?】|[#*&^]", "",bot_response)
                     await manager.send_personal_message(bot_response, websocket)
             elif role == "operator":
+                
                 if check_connected_with_human:
                     print("is user requested", check_connected_with_human)
                     await manager.broadcast(f"Operator  {data}", websocket)
                 else:
                     print("nope")
+                    await manager.send_personal_message("No user is connected", websocket)
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
         # await manager.broadcast(f"Operator {client_id} has disconnected.", websocket)
 
 
-async def connect_with_human(websocket: WebSocket, client_id: int, check_connected_with_human,data):
+async def connect_with_human(websocket: WebSocket, client_id: int,data, check_operator_available):
+    
+            """Handle transition to human operator."""
+            await manager.send_personal_message("You are now chatting with a live representative.", websocket)
+            await manager.broadcast(f"Customer {client_id} has requested to speak with an operator.", websocket)
+            await manager.broadcast("Connection successful with the customer chat. Please proceed.",websocket)
+            print(f"this message is from connect with humn function {whole_connversation}")
+            await manager.broadcast(f"summary :",websocket)
+            
 
-    """Handle transition to human operator."""
-    await manager.send_personal_message("You are now chatting with a live representative.", websocket)
-    await manager.broadcast(f"Customer {client_id} has requested to speak with an operator.", websocket)
-    await manager.broadcast("Connection successful with the customer chat. Please proceed.",websocket)
-    print(f"this message is from connect with humn function {whole_connversation}")
-    await manager.broadcast(f"summary :",websocket)
+            if whole_connversation["isthereconvo"]:
+                    index = 0       
+                    for message in reversed(whole_connversation['whole_data'].data):  
+                        print(f"Message ID: {message.id}")
+                        
+                        for content_block in reversed(message.content):  # Loop through the content list in reverse
+                            if hasattr(content_block, 'text'):  # Check if 'text' attribute exists
+                                print(f"Content Value: {content_block.text.value}")
+                                
+                                
+                                if index % 2 == 0:
+                                    if content_block.text.value == "The customer was asked if they would like to connect with a human executive but declined the offer":
+                                        await manager.broadcast(f"Noted : {content_block.text.value}", websocket)
+                                    else:
+                                        await manager.broadcast(f"user : {content_block.text.value}", websocket)
+                                else:
+                                    await manager.broadcast(f"Bot : {content_block.text.value}", websocket)
+                                    
+                                index += 1
+                    await manager.broadcast(f"user : {data}", websocket)
+            else:
+                await manager.broadcast(f"user: {data}", websocket)
     
 
-    if whole_connversation["isthereconvo"]:
-            index = 0       
-            for message in reversed(whole_connversation['whole_data'].data):  
-                print(f"Message ID: {message.id}")
-                
-                for content_block in reversed(message.content):  # Loop through the content list in reverse
-                    if hasattr(content_block, 'text'):  # Check if 'text' attribute exists
-                        print(f"Content Value: {content_block.text.value}")
-                        
-                        
-                        if index % 2 == 0:
-                            if content_block.text.value == "The customer was asked if they would like to connect with a human executive but declined the offer":
-                                await manager.broadcast(f"Noted : {content_block.text.value}", websocket)
-                            else:
-                                await manager.broadcast(f"user : {content_block.text.value}", websocket)
-                        else:
-                            await manager.broadcast(f"Bot : {content_block.text.value}", websocket)
-                            
-                        index += 1
-            await manager.broadcast(f"user : {data}", websocket)
-    else:
-        await manager.broadcast("no previous conversation", websocket)
+            
+            # await manager.broadcast(f"coversation {whole_connversation}",websocket)
+            print(f"this is client_id{client_id}")
+
+            try:
+                while True:
+                    data = await websocket.receive_text()
+                    message = f"Customer {client_id}: {data}" if websocket in manager.active_connections else f"Operator {client_id}: {data}"
+                    
+                    await manager.broadcast(message, websocket)
+                    print("opeator message", message)
+                    
+                    # await manager.send_personal_message("not connected with any customer", websocket)
+
+                    
+            except WebSocketDisconnect:
+                await manager.disconnect(websocket)
+                await manager.broadcast(f"{client_id} has disconnected.", websocket)
 
 
-            
-    # await manager.broadcast(f"coversation {whole_connversation}",websocket)
-    print(f"this is client_id{client_id}")
 
-    try:
-        while True:
-            data = await websocket.receive_text()
-            message = f"Customer {client_id}: {data}" if websocket in manager.active_connections else f"Operator {client_id}: {data}"
-            
-            await manager.broadcast(message, websocket)
-            print("opeator message", message)
-            
-            # await manager.send_personal_message("not connected with any customer", websocket)
-
-            
-    except WebSocketDisconnect:
-        await manager.disconnect(websocket)
-        await manager.broadcast(f"{client_id} has disconnected.", websocket)
 
 async def chat_with_bot(data: str,client,thread) -> str:
     """Run the bot logic asynchronously."""
