@@ -121,7 +121,11 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
                 print("intent from websocket", intent)
                 sentiment  = analyze_sentiment(data)
                 print("sentiment in websocket", sentiment)
-                if intent == "connect_with_human" or sentiment == 'NEGATIVE' or count_tracker["total_count"] == 2 :
+                print("from first")
+    
+                # if intent == "connect_with_human" or sentiment == 'NEGATIVE' or count_tracker["total_count"] == 2 :
+                if intent == "connect_with_human" or sentiment == 'NEGATIVE':
+                    
                     await manager.send_personal_message(
                         json.dumps({
                             "type": "options",
@@ -142,7 +146,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
                     data = f"The previous message was: '{previous_message}'. We offered the user an option to connect with an executive, and their choice was: '{choice}'."
 
 
-                    data = f"The previous message was: '{previous_message}'. We offered the user an option to connect with an executive, and their choice was: '{choice}'."
+                    # data = f"The previous message was: '{previous_message}'. We offered the user an option to connect with an executive, and their choice was: '{choice}'."
 
 
                     if choice == "yes":
@@ -153,9 +157,10 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
                         await connect_with_human(websocket, client_id, data, check_operator_available, check_connected_with_human, session_active)
                         
                     else:
+                        count_tracker["total_count"] = 0
                         bot_response = await chat_with_bot(data,client,thread, count_tracker)
                         bot_response= re.sub(r"【.*?】|[#*&^]", "",bot_response)
-                        count_tracker["total_count"] = 0
+                        
                         await manager.send_personal_message(bot_response, websocket)
 
                 else:
@@ -177,6 +182,36 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, role: str):
                 #         websocket
                 #     )
                 #     count_tracker["total_count"] = 0
+                
+                #     data = await websocket.receive_text()
+                #     parsed_data = json.loads(data)
+                #     print(f"parsed data {parsed_data}")
+                #     choice = parsed_data.get("choice", "").lower()
+                #     previous_message = parsed_data.get("previous_message", "")
+                #     print("second time yar")
+                #     data = f"The previous message was: '{previous_message}'. We offered the user an option to connect with an executive, and their choice was: '{choice}'."
+
+
+                #     # data = f"The previous message was: '{previous_message}'. We offered the user an option to connect with an executive, and their choice was: '{choice}'."
+
+
+                #     if choice == "yes":
+                #         print("Calling connect with human")
+                #         check_connected_with_human = True  # Now modifying the global variable
+                #         print(f" changing connection", check_connected_with_human)
+                        
+                #         await connect_with_human(websocket, client_id, data, check_operator_available, check_connected_with_human, session_active)
+                #     else:
+                #         bot_response = await chat_with_bot(data,client,thread, count_tracker)
+                #         bot_response= re.sub(r"【.*?】|[#*&^]", "",bot_response)
+                        
+                #         await manager.send_personal_message(bot_response, websocket)
+
+
+                        
+                
+
+                    
             elif role == "operator":
                 
                 if check_connected_with_human:
@@ -283,7 +318,14 @@ def chat_with_bot_sync(data: str, client,thread,count_tracker) -> str:
             thread_id=thread.id,
             assistant_id=ASSISTANT_ID,
             instructions=(
-                """Please respond to the user. Address them as a  HNI customer.Respond to the user in a professional and customer-focused manner and answer mostly within the context of HNI coporation and dont hullicinate anything with is not in knowledge base. Write a clear, well-formatted, and readable response.Additionally,try to provide links from the dcoument if only available dont give empty links and make sure neat and clean no unesscary space and make sure to strictly only from the given documents do not anwer any thing which is not in the documents"""
+               """- Address the user as a High Net-Worth Individual (HNI) customer and maintain a professional, customer-focused tone.  
+- Respond strictly based on the information provided in the uploaded documents. Do not rely on or reference general knowledge or external sources.  
+- Ensure responses are concise, well-structured, and free from unnecessary spaces or redundant information.  
+- Include links or references only if they are explicitly available in the provided documents. Avoid empty or placeholder links.  
+- If the requested information is not available in the documents, politely inform the user of the limitation.  
+- Maintain focus on delivering a seamless and accurate user experience, specifically within the context of HNI Corporation and related materials.
+- Ensure the response is formatted in neat and clean HTML and list if necessary for easy integration and readability.  
+"""
             )
         )
         if run.status == 'completed':
@@ -301,12 +343,12 @@ def chat_with_bot_sync(data: str, client,thread,count_tracker) -> str:
             response = messages.data[0].content[0].text.value
             print(f"resposne, {response}")
 
-            increase_count=check_answer.check_answer_type(response)
-            print(f"check answer type {increase_count}")
-            if increase_count =="donotanswer":
-                count_tracker["total_count"] += 1
-            else:
-                count_tracker["total_count"] = 0
+            # increase_count=check_answer.check_answer_type(response)
+            # print(f"check answer type {increase_count}")
+            # if increase_count =="donotanswer":
+            #     count_tracker["total_count"] += 1
+            # else:
+            #     count_tracker["total_count"] = 0
             
             print(f"current count value is {count_tracker}")
             
